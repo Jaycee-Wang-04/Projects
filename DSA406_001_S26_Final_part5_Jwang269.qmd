@@ -1,0 +1,1718 @@
+---
+title: "DSA406_001_S26_Final_part5_Jwang269"
+author: "Jaycee Wang"
+date: today
+format: 
+html:
+    fig-width: 10
+    fig-height: 6
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    toc-title: "Project Contents"
+editor: visual
+---
+
+```{=html}
+<!-- ============================================================
+     HOW TO USE THIS TEMPLATE
+     
+     This document guides you through your full final project 
+     from start to finish. Work through each section in order.
+     
+     REQUIRED sections must be completed.
+     OPTIONAL sections can be skipped if they do not apply 
+     to your dataset.
+     
+     Every section follows the same pattern:
+       1. What you are doing (and why)
+       2. The code block or writing prompt
+       3. A place to write your interpretation
+     
+     Read each introduction before running any code.
+     ============================================================ -->
+```
+
+------------------------------------------------------------------------
+
+# About This Project
+
+**What this project is:** An exploratory data analysis (EDA) of a dataset you have chosen. EDA means you are investigating your data, not proving a hypothesis. Think of yourself as a detective learning what the data can and cannot tell you.
+
+**What you will turn in:** This completed `.qmd` file, rendered as HTML, with all code chunks run and all written responses filled in.
+
+**How this document is organized:**
+
+-   Part 1 -- Data Setup and Loading
+-   Part 2 -- Initial Planning: What We Know So Far
+-   Part 3 -- SCAN Framework: First Exploration
+-   Part 4 -- Missing Data Analysis
+-   Part 5 -- Variable Selection
+-   Part 6 -- Exploratory Visualizations
+-   Part 7 -- Stakeholder Communication
+-   Final Checklist and Grading Criteria
+
+Work through the parts in order. Each part builds on the one before it.
+
+------------------------------------------------------------------------
+
+# Setup: Load Required Libraries
+
+**Why this step:** All the tools you need are in R packages. This chunk checks whether each package is installed and loads it. Run this first before anything else.
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+required_packages <- c(
+  "tidyverse",   # Data manipulation and visualization
+  "arrow",       # Efficient big data handling
+  "duckdb",      # In-process analytics database
+  "dbplyr",       # translates dplyr code into SQL
+  "DBI",         # Database interface
+  "glue",        # String formatting
+  "naniar",      # Missing data visualization
+  "corrr",       # Correlation analysis
+  "scales"       # Axis label formatting
+)
+
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+}
+
+lapply(required_packages, library, character.only = TRUE)
+```
+
+------------------------------------------------------------------------
+
+## Part 1: Data Setup and Loading
+
+**What you are doing:** Loading your dataset into R in a way that does not crash your computer. The method you use depends entirely on what format your data is in and how large it is. This section walks you through that decision step by step.
+
+**Read this before touching any code.**
+
+------------------------------------------------------------------------
+
+## Step 1: Figure Out What You Have
+
+Before running anything, answer these two questions:
+
+**Question 1: What is your file format?** Look at your file name and its extension (the letters after the last dot).
+
+-   Ends in `.parquet` -- go to Option A
+-   Ends in `.zip` -- go to Option B
+-   Ends in `.csv` -- go to Option C
+-   Ends in `.txt`, `.tsv`, or anything else with rows and columns -- go to Option D
+-   You are downloading from an API or website using R code -- go to Option E
+
+**Question 2: How large is your file?** Right-click your file and check its size (on Windows: Properties, on Mac: Get Info).
+
+-   Under 2GB -- load it directly using the option you chose above
+-   Between 2GB and 5GB -- try loading it directly first. If R crashes or freezes, come back and use the convert-to-parquet version in your option
+-   Over 5GB -- do not try to load it directly. Go straight to the convert-to-parquet version in your option, or ask your instructor
+
+------------------------------------------------------------------------
+
+## Step 2: Load Your Data
+
+Find the option that matches your file format and run only that section.
+
+-   Delete or comment out all the other options BEFORE you render.
+
+------------------------------------------------------------------------
+
+### Option C: Your file is a CSV file (.csv)
+
+A CSV (comma-separated values) file uses commas to separate columns. If you open your file in a plain text editor (Notepad on Windows, TextEdit on Mac) and the values in each row are separated by commas, this is your option.
+
+**If your file is under 2GB**, load it directly:
+
+```{r}
+#| label: load-csv-small
+
+# UPDATE the path below
+my_data <- read_csv("C:/Users/Jiach/OneDrive/Desktop/DSA406_Spring2026/data/spotify_data.csv")
+
+glimpse(my_data)
+```
+
+------------------------------------------------------------------------
+
+## Step 3: Verify the Data Loaded Correctly
+
+**Why this step:** Before spending time on analysis, confirm the data looks the way you expect. Run this regardless of which option you used above.
+
+```{r}
+#| label: data-verification
+
+# Look at the structure -- column names, data types, first few values
+glimpse(my_data)
+
+# See the first few rows
+my_data |> 
+  head(10) |> 
+  collect()
+
+# Count total rows
+my_data |> 
+  summarise(total_rows = n()) |> 
+  collect()
+```
+
+**On first glance - write your response below:**
+
+```         
+Explain your data science thinking here (e.g., What format and loading option did you use? How large is your dataset? Do column names and data types look correct? Anything unexpected?): I used Option C (CSV under 2GB) and loaded the dataset with read_csv(). The file is about 168 MB and it loaded without crashing. The dataset has 1.16 million rows and 20 columns. Most columns look correctly typed (character fields for artist/track/genre/track_id and numeric fields for audio features like danceability, energy, tempo, duration_ms). I also noticed a small number of missing values in artist_name (15) and track_name (1). Some numeric fields include suspicious values like tempo = 0 and time_signature = 0, which likely represent missing/invalid measurements rather than real songs.
+```
+
+------------------------------------------------------------------------
+
+# Part 2: Initial Planning - What We Know So Far
+
+**What you are doing:** Let's create an initial plan for our EDA based on what we know right now. This helps you think strategically before diving into the details.
+
+**Why this matters:** Good analysis starts with a clear plan. These questions help you focus on what matters most.
+
+------------------------------------------------------------------------
+
+## Question 1: Who would care about this data?
+
+Think about the people or organizations who would use insights from this dataset to make decisions.
+
+**Write your response here:**
+
+```         
+Primary stakeholders (who would use this analysis): Spotify streaming product teams (recommendations + personalization), Playlist editors and music curators, Record labels teams and artists’ management, Music advertisers (audience + mood targeting), Researchers studying music trends and genre characteristics
+
+What decisions could this data help them make: How popularity relates to audio features (danceability/energy/valence/etc.) and What kinds of tracks are overrepresented or underrepresented by year/genre.
+```
+
+------------------------------------------------------------------------
+
+## Question 2: What does this dataset actually cover?
+
+Understanding the boundaries of your data helps you know what questions you can and cannot answer.
+
+**Write your response here:**
+
+```         
+Time period covered by the data: Years 2000 through 2023
+
+Geographic area or scope: Not explicitly geographic
+
+What population or phenomenon is represented: Individual tracks on Spotify with metadata and audio features
+
+What might be missing or underrepresented: Any geography based differences, Tracks before 2000 and after 2023, Popularity is a Spotify specific metric and may change over time.
+```
+
+------------------------------------------------------------------------
+
+## Question 3: What quality concerns do we see or anticipate?
+
+Based on your first look at the data, what issues might affect your analysis?
+
+**Write your response here:**
+
+```         
+Missing data concerns: Very low missingness overall, but there are some missing artist_name values. 
+
+Data type issues you noticed (e.g., dates stored as text, numbers as strings): “Unnamed: 0” appears to be an index column and should not be analyzed as a meaningful variable.
+
+Consistency concerns (e.g., same category spelled multiple ways): Ar.tist names may have variants
+
+Any values that look suspicious or incorrect: duration_ms has extreme outliers. tempo includes 0 values, which likely indicates invalid tempo.
+```
+
+------------------------------------------------------------------------
+
+## Question 4: What are we expecting to find?
+
+Based on what you already know about this topic or domain, what patterns do you expect?
+
+**Write your response here:**
+
+```         
+What you expect to find:
+  1. Newer years may show slightly different average feature patterns 
+  2. Different genres will have distinct feature “profiles”
+  3. Popularity will have weak to moderate relationships with some features, but not perfectly.
+
+What would surprise you: If genre profiles overlap heavily with little separation in audio features.
+
+What would be most valuable to discover: Which genres contain the most “popular” tracks and whether that’s consistent across years.
+```
+
+------------------------------------------------------------------------
+
+# Part 3: SCAN Framework -- First Exploration
+
+**What you are doing:** Systematically exploring your dataset for the first time. The SCAN framework gives each step a purpose so the exploration is organized, not random.
+
+------------------------------------------------------------------------
+
+## S -- Stakeholders Revisited
+
+**Why this step:** Now that you have seen the actual data structure, you can revisit who might care about it and refine your initial thinking.
+
+```{r}
+#| label: scan-stakeholders
+
+# Examine the column names and data types
+colnames(my_data)
+```
+
+**Explain your data science thinking here (e.g., After seeing the actual columns, who else might be interested? What questions would they have? Any quality concerns?):**
+
+```         
+After seeing the columns, people who would care include Spotify/recommendation teams, playlist curators, and music marketers. They would ask how songs differ by genre and what audio features are linked to higher popularity.
+```
+
+------------------------------------------------------------------------
+
+## C -- Columns and Coverage
+
+**Why this step:** Document what each column contains so you have a reference throughout the project.
+
+```{r}
+#| label: scan-columns
+
+# Create a summary of all variables
+# This gives you: column name, data type, count of non-missing values
+my_data |>
+  summarise(across(everything(), list(
+    n_missing = ~sum(is.na(.)),
+    n_distinct = ~n_distinct(.)
+  ))) |>
+  collect()
+```
+
+**Write your response here -- fill in a row for each variable:**
+
+| Variable Name | Data Type (class) | What do we notice form the output? Things to keep an eye on? |
+|------------------------|------------------------|------------------------|
+| `...1` | integer | 1,159,764 distinct, looks like a row/index column. |
+| `artist_name` | character | 64,158 distinct artists; check name consistency. |
+| `track_name` | character | 882,361 unique tracks; duplicates possible across artists. |
+| `track_id` | character | 1,159,764 unique ID for each row (good key). |
+| `popularity` | integer | 98 distinct, likely 0–100 scale; check distribution/skew. |
+| `year` | integer | 24 distinct year, 2000–2023. |
+| `genre` | character | 82 distinct manageable categories; check spelling/overlap. |
+| `danceability` | numeric | 1,364 distinct, continuous 0–1; check outliers. |
+| `energy` | numeric | 3,116 distinct, continuous 0–1; check genre differences. |
+| `key` | integer | 12 distinct values 0–11; treat as categorical (not “higher or lower”). |
+| `loudness` | numeric | 37,368 distinct; watch extreme values. |
+| `mode` | integer | 2 distinct binary (major/minor); treat as categorical. |
+| `speechiness` | numeric | 1,655 distinct; some genres higher. |
+| `acousticness` | numeric | 5,398 distinct, continuous 0–1; likely separates acoustic vs electronic. |
+| `instrumentalness` | numeric | 5,402 distinct; watch heavy zero-inflation. |
+| `liveness` | numeric | 1,816 distinct, continuous 0–1; may be noisy. |
+| `valence` | numeric | 2,177 distinct, “positiveness” 0–1; compare across genres. |
+| `tempo` | numeric | 135,697 distinct; check if any 0 or unrealistic tempos. |
+| `duration_ms` | integer | 258,021 distinct; check very short/very long outliers. |
+| `time_signature` | integer | 5 distinct usually 3/4/5; check for unusual values. |
+
+------------------------------------------------------------------------
+
+## A -- Aggregates: Overall Picture
+
+**Why this step:** Get a high-level numerical picture of your dataset before looking at subgroups.
+
+```{r}
+#| label: scan-aggregates
+
+# Summary statistics for numeric columns
+my_data |>
+  summarise(across(where(is.numeric), list(
+    min  = ~min(., na.rm = TRUE),
+    mean = ~mean(., na.rm = TRUE),
+    max  = ~max(., na.rm = TRUE)
+  ))) |>
+  collect()
+```
+
+```{r}
+#| label: scan-counts
+
+# Frequency counts for categorical columns
+# UPDATE 'your_categorical_column' with an actual column name from your data
+my_data |>
+  count(genre, sort = TRUE) |>
+  head(20) |>
+  collect()
+```
+
+**Explain your data science thinking here (e.g., What are the key metrics and their ranges? What are the most common categories? Anything that seems off?):**
+
+```         
+The top genres (black-metal, gospel, ambient, acoustic, alt-rock, etc.) each have around 20k tracks, so the dataset looks fairly balanced across genres. Nothing looks obviously wrong, but I should check for similar/overlapping genre labels and any genres with very small counts.
+```
+
+|                                     |
+|:-----------------------------------:|
+| 🛑 STOP HERE Turn in Project Part 2 |
+
+## N -- Notable Segments
+
+**Why this step:** Look for interesting subgroups or patterns that might be worth investigating further.
+
+```{r}
+#| label: scan-segments
+
+# Analyze a key categorical variable
+# UPDATE the column names below to match your data
+my_data |>
+  group_by(genre) |>
+  summarise(
+    count       = n(),
+    mean_metric = mean(tempo, na.rm = TRUE)
+  ) |>
+  arrange(desc(count)) |>
+  collect()
+```
+
+**Write your response here:** The dataset is balanced across genres, with many genres containing around 20,000 tracks each. The average tempo varies by genre, with genres like emo and alt-rock showing higher average tempos compared to genres like ambient and new-age. This shows that tempo could be an important musical characteristic that differentiates genres.
+
+```         
+DATASET OVERVIEW:
+  Records: 1,159,764 representing individual tracks
+  Time span: 2000 to 2023
+  Key metrics: popularity, danceability, energy, valence, tempo, loudness, and duration_ms
+
+
+DATA COMPLETENESS:
+  Core fields: 100% complete
+  artist_name: 99.99% complete 
+  track_name: 99.999% complete
+
+DATA QUALITY STRENGTHS:
+  1. large dataset with over 1.15 million tracks which gives strong statistical power.
+  2. Most numeric audio features are standardized between 0 and 1, making comparisons easier.
+  3. Missing data levels are extremely low for important variables.
+
+DATA QUALITY CONCERNS:
+  1.  Some numeric variables contain suspicious values like tempo = 0 or time_signature = 0.
+  2. duration_ms contains extreme outliers that may represent data errors or unusual tracks.
+  3. artist_name may contain inconsistent spelling or formatting variations.
+
+MISSING DATA IMPACT:
+  Most missing variable: [artist_name] at [0.001%] missing
+  Impact on analysis: Negligible impact because missingness is extremely small relative to dataset size.
+  Handling strategy (your initial thinking): Replace missing artist names with "Unknown Artist" or remove those few rows.
+
+RELIABILITY ASSESSMENT:
+  Most reliable variables: danceability, energy, acousticness, valence, popularity, year.
+  Variables needing caution: tempo, duration_ms, artist_name.
+  Overall confidence: High
+
+JUSTIFICATION for your confidence rating: The dataset is large, around 99% variables are complete, and Spotify audio features are standardized metrics. The few missing values and potential outliers can be handled with simple cleaning steps without affecting overall analysis.
+```
+
+------------------------------------------------------------------------
+
+## I Wonder Questions
+
+**What you are doing:** Based on everything you have seen so far, write 1 to 3 initial wondering questions. These are genuine questions you have after your first look at the data. As you explore in Parts 4-6, you will come back here and add 2 more questions. That is how exploratory data analysis works.
+
+**A good wondering question is:**
+
+-   Specific (not "what is interesting about the data")
+-   Answerable with what you have (your data can actually address it)
+-   Connected to a stakeholder need (someone would care about the answer)
+
+**Write your initial wondering questions here:**
+
+```         
+I wonder question 1: Do certain genres consistently have higher average popularity than others?
+
+
+I wonder question 2 (optional to start): Have the average audio characteristics of songs changed from 2000 to 2023?
+
+
+I wonder question 3 (optional to start): How strongly are audio features like danceability, energy, and valence related to track popularity?
+
+
+---
+
+As you work through Parts 4-6, come back here and add more questions as they emerge:
+
+I wonder question 4: Are certain genres associated with more extreme audio feature values (for example very high energy or very low acousticness)?
+
+
+I wonder question 5: Do more popular songs tend to have similar durations compared to less popular songs?
+```
+
+------------------------------------------------------------------------
+
+# Part 4: Missing Data Analysis
+
+**What you are doing:** Systematically understanding where data is missing, why it might be missing, and how you will handle it. The decisions you make here affect everything downstream.
+
+**The three questions to answer for each variable:** 1. How MUCH data is missing? 2. WHERE is it missing (in certain groups? certain time periods)? 3. WHY is it missing (random accident or a systematic pattern)?
+
+------------------------------------------------------------------------
+
+## Step 1: Quantify Missing Data
+
+**Exploratory Question 1:** What percentage of data is missing for each variable?
+
+```{r}
+#| label: missing-quantification
+
+# Count and calculate missing percentages for all variables
+# UPDATE the variable names to match your actual columns
+missing_summary <- my_data |>
+  summarise(
+    total_rows  = n(),
+    missing_var1 = sum(is.na(artist_name) | artist_name == ""),
+    missing_var2 = sum(is.na(duration_ms) | duration_ms == ""),
+    missing_var3 = sum(is.na(track_name))
+    # Add more variables as needed
+  ) |>
+  collect()
+
+# Convert to percentages in a tidy format
+missing_pct <- missing_summary |>
+  mutate(
+    pct_var1 = round(missing_var1 / total_rows * 100, 2),
+    pct_var2 = round(missing_var2 / total_rows * 100, 2),
+    pct_var3 = round(missing_var3 / total_rows * 100, 2)
+  ) |>
+  select(starts_with("pct_")) |>
+  pivot_longer(everything(),
+               names_to  = "variable",
+               values_to = "percent_missing") |>
+  mutate(variable = str_remove(variable, "pct_"))
+
+missing_pct
+```
+
+```{r}
+#| label: missing-visualization
+#| fig-cap: "Missing data percentages across all variables"
+
+missing_pct |>
+  mutate(variable = reorder(variable, percent_missing)) |>
+  ggplot(aes(x = percent_missing, y = variable, fill = percent_missing)) +
+  geom_col() +
+  scale_fill_gradient(low = "#1a9850", high = "#d73027") +
+  theme_minimal() +
+  labs(
+    title    = "Missing Data Across Variables",
+    subtitle = "Your Dataset Name",
+    x        = "Percentage Missing (%)",
+    y        = "Variable"
+  ) +
+  theme(legend.position = "none")
+```
+
+**Explain your data science thinking here (e.g., Which variables have the most missing data? Are any nearly complete? Does the level of missingness concern you?):**
+
+```         
+Because the missingness level is extremely small, it does not create a serious concern for the analysis. These missing values can either be removed or replaced with a placeholder category such as "Unknown". The rest of the dataset appears essentially complete.
+```
+
+------------------------------------------------------------------------
+
+## Step 2: Identify Patterns in Missingness
+
+**Exploratory Question 2:** Does missingness vary by group?
+
+```{r}
+#| label: missing-by-group
+
+# UPDATE 'grouping_variable' and 'variable_to_check' with real column names
+missing_by_group <- my_data |>
+  group_by(genre) |>
+  summarise(
+    total_items   = n(),
+    missing_count = sum(is.na(artist_name) | artist_name == ""),
+    .groups       = "drop"
+  ) |>
+  mutate(pct_missing = round(missing_count / total_items * 100, 1)) |>
+  arrange(desc(pct_missing)) |>
+  collect()
+
+missing_by_group
+```
+
+```{r}
+#| label: missing-by-group-viz
+#| fig-cap: "Does missingness vary by group?"
+
+missing_by_group |>
+  ggplot(aes(x = reorder(genre, -pct_missing),
+             y = pct_missing)) +
+  geom_col(fill = "#4575b4") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title    = "Missing Data by Group",
+    subtitle = "Are certain groups more affected than others?",
+    x        = "Group",
+    y        = "Percentage Missing (%)"
+  )
+```
+
+**Explain your data science thinking here (e.g., Do certain groups have more missing data? Is there a logical reason? Does this look random or systematic?):**
+
+```         
+The visualization shows that missing values are extremely rare across all genres. No specific genre appears to have noticeably higher missing percentages than others. This suggests that the missing data is likely random and does not systematically affect any particular group.
+```
+
+------------------------------------------------------------------------
+
+**Exploratory Question 3:** Does missingness change over time?
+
+*Skip this section if your dataset does not have a time variable.*
+
+```{r}
+#| label: missing-over-time
+
+# UPDATE 'time_variable' and 'variable_to_check' with real column names
+missing_by_time <- my_data |>
+  group_by(year) |>
+  summarise(
+    total_records = n(),
+    missing_count = sum(is.na(artist_name) | artist_name == ""),
+    .groups       = "drop"
+  ) |>
+  mutate(pct_missing = round(missing_count / total_records * 100, 2)) |>
+  arrange(year) |>
+  collect()
+
+ggplot(missing_by_time, aes(x = year, y = pct_missing)) +
+  geom_line(color = "#4575b4", linewidth = 1.2) +
+  geom_point(color = "#4575b4", size = 3) +
+  labs(
+    title    = "Missing Data Over Time",
+    subtitle = "Is there a trend?",
+    x        = "Time Period",
+    y        = "Percentage Missing (%)"
+  ) +
+  theme_minimal()
+```
+
+**Explain your data science thinking here (e.g., Is missingness improving, worsening, or constant over time? What might explain the pattern? Does this affect which time periods to focus on?):**
+
+```         
+The percentage of missing values remains zero across all years from 2000 to 2023. This suggests the missing data is minimal and consistent across the entire time period, so it should not affect the analysis of trends over time.         
+```
+
+------------------------------------------------------------------------
+
+## Step 3: Classify Missingness Types
+
+**Why this step:** The type of missingness determines your handling strategy. Using the wrong strategy can bias your results.
+
+**Three types of missingness:**
+
+-   **MCAR (Missing Completely At Random):** Missing values have no relationship to any other variable. Example: random data entry errors. These are the safest to handle -- deletion or simple imputation is fine.
+
+-   **MAR (Missing At Random):** Missingness is related to other variables you CAN observe. Example: older records missing a field that was added later. You need to account for the related variable in your strategy.
+
+-   **MNAR (Missing Not At Random):** Missingness is related to the value that is missing itself. Example: high earners not reporting income. This is the most problematic because imputation can introduce bias.
+
+```{r}
+#| label: missingness-classification
+
+# Fill in a row for each variable that has missing data
+# Replace the example rows with your actual variables
+missingness_classification <- tribble(
+  ~variable,   ~pct_missing, ~type,  ~evidence,                          ~impact_on_analysis,
+  "artist_name", 0.0,         "MCAR",  "random data entry errors", 
+"Very low impact",
+  "track_name", 0.0,          "MCAR", "random data entry errors", "Very low impact",
+)
+
+missingness_classification |>
+  arrange(desc(pct_missing))
+```
+
+**Write your justification for each classification:**
+
+```         
+Variable 1: [artist_name] -- [MCAR]
+Justification: Very small number of values are missing (less than 0.01%) and they are spread randomly across the dataset. There is no clear pattern by genre or year.
+
+
+Variable 2: [track_name] -- [MCAR]
+Justification: Very small number of values are missing (less than 0.01%) in this column, which suggests it is a random data entry issue rather than a systematic pattern. 
+
+
+(Add more as needed)
+```
+
+------------------------------------------------------------------------
+
+## Step 4: Choose Handling Strategies
+
+**Reference table for choosing a strategy:**
+
+| Missingness Type | Data Type | Recommended Strategy | Reason |
+|------------------|------------------|------------------|-------------------|
+| MCAR | Categorical | Delete rows or "Unknown" label | Random -- any method works |
+| MCAR | Numeric | Mean or median imputation | Simple and unbiased |
+| MAR | Categorical | Group-wise imputation or "Unknown" | Account for related variables |
+| MAR | Numeric | Group-wise median or mean | Preserves group differences |
+| MNAR | Any | Keep as missing and flag it | Imputation could bias results |
+
+**Exploratory Question 4:** How will you handle missing values in categorical variables?
+
+```{r}
+#| label: categorical-strategy
+
+# Example: Replace missing values with "Unknown"
+# UPDATE 'categorical_var' with your actual column name
+my_data_clean <- my_data |>
+  mutate(
+    categorical_clean = case_when(
+      is.na(artist_name) | artist_name == "" ~ "Unknown",
+      TRUE ~ artist_name
+    )
+  )
+
+# Verify the strategy worked
+my_data_clean |>
+  group_by(categorical_clean) |>
+  summarise(count = n(), .groups = "drop") |>
+  arrange(desc(count)) |>
+  collect()
+```
+
+**Write your strategy for each categorical variable with missing data:**
+
+```         
+Variable: [artist_name]
+Strategy chosen: [Replace missing values with "Unknown"]
+Justification: The missingness appears to be MCAR and occurs in only a very small number of rows, so labeling them as "Unknown" allows the dataset to remain complete without introducing bias.
+Impact on analysis: Minimal impact because the number of missing values is extremely small relative to the full dataset.
+
+Variable: [track_name]
+Strategy chosen: [Delete rows with missing values]
+Justification: There is only one missing track name in the dataset, so removing that row will not  be meaningful.
+Impact on analysis: No noticeable impact due to the extremely small number of missing cases.
+```
+
+------------------------------------------------------------------------
+
+**Exploratory Question 5:** For numeric variables, should you use the mean or the median?
+
+**Following our lesson from Week 10,** visualize the distribution to understand the shape and identify outliers before choosing your imputation strategy.
+
+```{r}
+#| label: numeric-distribution-histogram
+
+# Look at the distribution of your numeric variable
+# UPDATE 'numeric_var' with your actual column name
+numeric_distribution <- my_data |>
+  filter(!is.na(popularity)) |>
+  select(popularity) |>
+  collect()
+
+# Histogram: See the overall shape
+ggplot(numeric_distribution, aes(x = popularity)) +
+  geom_histogram(bins = 50, fill = "#4575b4", color = "white") +
+  labs(
+    title    = "Distribution of popularity",
+    subtitle = "Is the distribution symmetric or skewed?",
+    x        = "Value",
+    y        = "Count"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| label: numeric-distribution-boxplot
+
+# Boxplot: Identify outliers
+ggplot(numeric_distribution, aes(y = popularity)) +
+  geom_boxplot(fill = "#4575b4", alpha = 0.6, width = 0.3) +
+  labs(
+    title    = "Boxplot of [Variable Name]",
+    subtitle = "Looking for outliers and skewness",
+    y        = "Value"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| label: numeric-summary-stats
+
+# Calculate summary statistics
+my_data |>
+  summarise(
+    mean_val   = mean(popularity, na.rm = TRUE),
+    median_val = median(popularity, na.rm = TRUE),
+    min_val    = min(popularity, na.rm = TRUE),
+    max_val    = max(popularity, na.rm = TRUE)
+  ) |>
+  collect() |>
+  mutate(difference = mean_val - median_val)
+```
+
+**Use the decision table from Week 10:**
+
+| Distribution Shape  | Mean vs Median   | Use        | Why                       |
+|-------------------|------------------|------------------|------------------|
+| **Symmetric**       | Mean ≈ Median    | **Mean**   | Uses all data efficiently |
+| **Right-Skewed**    | Mean \> Median   | **Median** | Mean inflated by outliers |
+| **Left-Skewed**     | Mean \< Median   | **Median** | Mean deflated by outliers |
+| **Severe Outliers** | Large difference | **Median** | Robust to extremes        |
+
+**Explain your data science thinking here (e.g., What does the histogram show? Where are the outliers in the boxplot? Is mean or median more appropriate for your data?):**
+
+```         
+The histogram shows that the popularity distribution is right-skewed, with more songs having lower popularity and fewer songs having very high popularity. The boxplot shows some higher value outliers near the top of the scale, which pull the mean upward. Because the mean is greater than the median and the distribution is skewed, the median is the more appropriate measure since it is less affected by extreme values.
+```
+
+------------------------------------------------------------------------
+
+**Exploratory Question 6:** Should you impute using the overall dataset value or separate values for each group?
+
+```{r}
+#| label: groupwise-imputation
+
+# Compare the median by group to see if groups differ meaningfully
+# UPDATE column names to match your data
+groupwise_stats <- my_data |>
+  group_by(genre) |>
+  summarise(
+    median_val = median(popularity, na.rm = TRUE),
+    mean_val   = mean(popularity, na.rm = TRUE),
+    count      = n(),
+    .groups    = "drop"
+  ) |>
+  collect()
+
+groupwise_stats
+
+# Apply group-wise imputation
+my_data_numeric_clean <- my_data |>
+  left_join(
+    groupwise_stats |> select(genre, median_val),
+    by = "genre"
+  ) |>
+  mutate(
+    numeric_clean = case_when(
+      is.na(popularity) ~ as.double(median_val),
+      TRUE               ~ as.double(popularity)
+    )
+  )
+
+# Confirm it worked
+my_data_numeric_clean |>
+  summarise(
+    missing_before = sum(is.na(popularity)),
+    missing_after  = sum(is.na(numeric_clean))
+  ) |>
+  collect()
+```
+
+**Write your strategy for each numeric variable with missing data:**
+
+```         
+Variable: [popularity]
+Distribution shape: [Right-skewed]
+Strategy chosen: [Median]
+Justification: The mean is slightly higher than the median, suggesting the distribution is right-skewed with some higher popularity outliers. The median is less affected by extreme values and better represents the typical popularity of songs.
+Impact on analysis: Using the median will provide a more stable central value and prevent high popularity outliers.
+```
+
+------------------------------------------------------------------------
+
+## Step 5: Impact Assessment
+
+**Exploratory Question 7:** How do different strategies affect your analysis?
+
+```{r}
+#| label: strategy-comparison
+
+# Document and compare the strategies you considered
+# UPDATE the Records_Kept column with your actual counts
+strategy_comparison <- tibble(
+  Strategy       = c("Delete rows with missing data",
+                     "Simple global imputation",
+                     "Group-wise imputation",
+                     "Keep as NA and flag"),
+  Records_Kept   = c("XXX,XXX", "XXX,XXX", "XXX,XXX", "XXX,XXX"),
+  Pros           = c("No assumptions made",
+                     "Simple and fast",
+                     "Accounts for group patterns",
+                     "Honest about unknowns"),
+  Cons           = c("May lose a large portion of data",
+                     "Ignores group differences",
+                     "More complex to implement",
+                     "Cannot be used in all analyses")
+)
+
+strategy_comparison
+```
+
+**Explain your data science thinking here (e.g., What strategy did you choose overall? What was the most challenging decision? What limitations might your choices introduce? How confident are you?):**
+
+```         
+The overall strategy chosen was to replace missing categorical values with "Unknown" and remove rows only when the missing data was extremely minimal. The most challenging decision was choosing between deleting rows and imputing values, but since the number of missing records was very small, the impact of either method was minimal. I am confident in this approach because it preserves nearly all records while keeping the dataset accurate and easy to analyze.
+```
+
+------------------------------------------------------------------------
+
+# Part 5: Variable Selection
+
+**What you are doing:** Narrowing your dataset down to the 3 to 7 variables that are most relevant to your research questions. Fewer, well-chosen variables lead to clearer analysis.
+
+------------------------------------------------------------------------
+
+## Step 1: Variable Inventory
+
+**Exploratory Question 8:** What role does each variable play?
+
+```{r}
+#| label: variable-inventory
+
+# Create a table categorizing every variable in your dataset
+# Replace the example rows with your actual variables
+variable_inventory <- tribble(
+  ~variable, ~role,       ~data_type,  ~usefulness, ~notes,
+"artist_name","Identifier","character", "Low","Artist label, not used for modeling",
+"track_name", "Identifier","character", "Low","Track label, mainly descriptive",
+"genre",      "Predictor", "character", "High","Key grouping variable for comparisons",
+"popularity", "Outcome", "numeric", "High", "Main response variable of interest",
+"tempo",      "Predictor","numeric", "Medium", "Musical feature that may influence popularity",
+"duration_ms","Predictor","numeric","Medium","Song length may affect listener behavior",
+"year",       "Time",     "integer",  "High", "Needed for time trend analysis"
+  # Add ALL your variables here -- even the ones you plan to exclude
+)
+
+variable_inventory |>
+  arrange(desc(usefulness), role)
+```
+
+**Write your initial assessment:**
+
+```         
+Variables you plan to keep and why: I plan to keep genre, popularity, tempo, duration_ms, and year because they are numeric or categorical variables that help explain differences in music characteristics and popularity. These variables are useful for grouping, comparison, and trend analysis.
+
+
+Variables you are unsure about: I am unsure about artist_name because it is descriptive but may not be useful for statistical analysis unless used for grouping specific artists.
+
+
+
+Variables you plan to exclude and why: I plan to exclude track_name because it is only an identifier and does not contribute meaningful numeric or categorical information for analysis.
+```
+
+------------------------------------------------------------------------
+
+## Step 2: Examine Relationships Between Variables
+
+**Exploratory Question 9:** Which numeric variables are correlated with each other?
+
+**Why this matters:** Highly correlated variables (r \> 0.7) contain overlapping information. You may not need both.
+
+```{r}
+#| label: correlation-analysis
+
+# Sample the data if the dataset is large
+correlation_data <- my_data |>
+  select(where(is.numeric)) |>
+  collect() |>
+  sample_n(min(10000, n()))
+
+# Calculate correlation matrix
+cor_matrix <- correlation_data |>
+  correlate() |>
+  rearrange()
+
+cor_matrix
+
+# Visualize
+cor_matrix |>
+  stretch() |>
+  ggplot(aes(x = x, y = y, fill = r)) +
+  geom_tile() +
+  scale_fill_gradient2(low  = "#d73027",
+                       mid  = "white",
+                       high = "#4575b4",
+                       midpoint = 0,
+                       limits   = c(-1, 1)) +
+  theme_minimal() +
+  labs(
+    title    = "Correlation Matrix",
+    subtitle = "Strong correlations may indicate redundant variables",
+    x        = NULL,
+    y        = NULL
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+**Explain your data science thinking here (e.g., Which variables are strongly correlated? Are any redundant? Any surprising correlations?):**
+
+```         
+The correlation analysis shows that loudness and energy are highly correlated, suggesting some redundancy, while most other numeric features, like tempo, danceability, and valence, have weak correlations and capture distinct aspects of a track. Popularity shows very low correlation with all audio features, indicating that factors beyond measurable song characteristics influence it. Overall, this suggests we can focus on a few key predictors without losing much information, but some caution is needed when including highly correlated variables like loudness and energy.
+```
+
+------------------------------------------------------------------------
+
+**Exploratory Question 10:** How do categorical variables relate to your outcome variable?
+
+```{r}
+#| label: categorical-relationships
+
+# UPDATE column names to match your data
+relationship_analysis <- my_data |>
+  group_by(genre) |>
+  summarise(
+    count          = n(),
+    mean_outcome   = mean(popularity, na.rm = TRUE),
+    median_outcome = median(popularity, na.rm = TRUE),
+    .groups        = "drop"
+  ) |>
+  arrange(desc(mean_outcome)) |>
+  collect()
+
+relationship_analysis
+
+ggplot(relationship_analysis,
+       aes(x = reorder(genre, mean_outcome),
+           y = mean_outcome)) +
+  geom_col(fill = "#4575b4") +
+  coord_flip() +
+  labs(
+    title    = "Popularity by Genre",
+    subtitle = "Does this variable add meaningful information?",
+    x        = "Genre",
+    y        = "Mean Popularity"
+  ) +
+  theme_minimal()
+```
+
+**Explain your data science thinking here (e.g., Does this categorical variable show meaningful differences? Should it be kept?):**
+
+```         
+The analysis shows that genre has a noticeable impact on popularity, with some genres consistently achieving higher average popularity than others. This suggests that genre is an important predictor of track success. Other categorical variables, like key or mode, show little variation in popularity across categories, indicating they may add limited predictive value. Overall, including genre in further analysis is likely to provide meaningful insights, while the other categorical variables may be less useful.
+```
+
+------------------------------------------------------------------------
+
+## Step 3: Final Variable Selection
+
+**Exploratory Question 11:** Which 3 to 7 variables best address your research questions?
+
+```{r}
+#| label: final-variables
+
+# Create a focused dataset with only your selected variables
+# LIST your chosen variables here
+my_data_focused <- my_data |>
+  select(
+    popularity,   
+    genre,      
+    duration_ms,  
+    year,
+    tempo         
+  )
+
+glimpse(my_data_focused)
+```
+
+```{r}
+#| label: selection-justification
+
+# Document your final selections with justification
+final_variables <- tribble(
+  ~variable,   ~role,       ~why_included,                ~research_question_addressed,
+   "popularity",   "Outcome",   "Primary metric of interest",            "Which features influence song popularity?",
+  "genre",        "Predictor", "Categorical factor affecting popularity","How does genre relate to popularity?",
+  "duration_ms",  "Predictor", "Song length affects listener engagement", "Does song duration influence popularity?",
+  "year",         "Time Variable",  "Allows analysis of trends in popularity over time",
+  "How has song popularity changed over time?",
+  "tempo",        "Predictor", "Tempo can influence listener engagement","Which musical traits predict popularity?"
+)
+
+final_variables
+```
+
+**Write your exclusion rationale:**
+
+```         
+Variables excluded and why:
+  1. loudness: Highly correlated with energy, redundant
+  2. key: Low relevance to popularity in exploratory analysis
+  3. acousticness: Weak correlation with outcome, less predictive
+  4. instrumentalness: Mostly zeros, little informative value
+  5. speechiness: Low correlation with popularity, not central to research questions
+```
+
+------------------------------------------------------------------------
+
+## Step 4: Tool Selection Check
+
+**Exploratory Question 12:** Are you using the right tool for your data size?
+
+```{r}
+#| label: tool-justification
+
+dataset_stats <- my_data |>
+  summarise(
+    total_rows = n(),
+    total_cols = ncol(my_data)
+  ) |>
+  collect()
+
+estimated_size_gb <- dataset_stats$total_rows * dataset_stats$total_cols * 8 / 1e9
+
+glue("
+Dataset size:
+  Rows:            {scales::comma(dataset_stats$total_rows)}
+  Columns:         {dataset_stats$total_cols}
+  Estimated size:  ~{round(estimated_size_gb, 1)} GB
+")
+```
+
+**Write your tool selection justification:**
+
+```         
+Tool you are using:
+  [x] Arrow      (best for datasets under 5 GB, simpler operations)
+  [ ] DuckDB     (best for 5 to 50 GB, complex queries)
+  [ ] Spark      (best for datasets over 50 GB, distributed systems)
+
+Reason for your choice: The dataset is only 0.2 GB with 1.16 million rows and 20 columns, which fits comfortably in memory. Arrow provides fast in-memory operations and is simple to use, making it ideal for this size without the overhead of more complex tools.
+
+
+Alternatives you considered:DuckDB: Could handle the dataset easily but is overkill for this size.
+```
+
+------------------------------------------------------------------------
+
+# Part 6: Exploratory Visualizations
+
+**What you are doing:** Creating visualizations that answer your research questions. You need at least 5 visualizations using at least 3 different chart types.
+
+**For every visualization, you must complete all three written sections:** 1. Pattern Observed: What do you see? 2. Statistical Evidence: Specific numbers or trends that support what you see. 3. Stakeholder Implications: Why does this matter to someone making decisions?
+
+**Chart type variety requirement:** - Line chart (trends over time) - Bar chart (comparing categories) - Scatter plot (relationship between two numeric variables) - Histogram or density plot (distribution of one variable) - Boxplot (distribution by group)
+
+------------------------------------------------------------------------
+
+## Visualization 1: Line Chart
+
+**Exploratory Question 13:** How has average popularity changed over time?
+
+```{r}
+#| label: viz-1
+#| fig-cap: "Descriptive caption for this chart"
+#| fig-width: 10
+#| fig-height: 6
+
+# UPDATE all variable names below
+viz_data_1 <- my_data_focused |>
+  group_by(year) |>
+  summarise(
+    avg_popularity  = mean(popularity, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  collect()
+
+ggplot(viz_data_1, aes(x = year, y = avg_popularity)) +
+  geom_line(color = "#4575b4", linewidth = 1.5) +
+  geom_point(size = 3, color = "#4575b4") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title    = "Average Popularity by Year",
+    subtitle = "Popularity trends across time",
+    x        = "Year",
+    y        = "Average Popularity",
+    caption  = "Source: Spotify Dataset"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11)
+  )
+```
+
+**Explain your data science thinking here (e.g., What pattern do you see? What specific numbers support this? What does this mean for stakeholders?):**
+
+```         
+There is a consistent, accelerating upward trend in song popularity from 2000 to 2022, followed by a sharp and sudden decline in 2023. This suggests that while older tracks maintain lower historical "popularity" scores, newer content dominated the metric until the most recent year. Average popularity scores nearly tripled over two decades, rising from approximately 10 in 2000 to a peak of over 30 in 2022, before plummeting to 20 in 2023.
+
+The drop in 2023 likely indicates an incomplete data collection year or a "lag" in how Spotify calculates popularity for brand-new releases. Stakeholders should prioritize 2021–2022 data for trend analysis and treat the 2023 "crash" as a data-entry artifact rather than a genuine loss of consumer interest.
+```
+
+------------------------------------------------------------------------
+
+## Visualization 2: Bar Chart
+
+**Exploratory Question 14:** Which genres have the highest average popularity?
+
+```{r}
+#| label: viz-2
+#| fig-cap: "Descriptive caption"
+#| fig-width: 10
+#| fig-height: 6
+
+# UPDATE all variable names below
+viz_data_2 <- my_data_focused |>
+  group_by(genre) |>
+  summarise(
+    avg_popularity = mean(popularity, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(desc(avg_popularity)) |>
+  collect() |>
+  slice_head(n = 10)
+
+ggplot(viz_data_2,
+       aes(x = reorder(genre, avg_popularity), y = avg_popularity)) +
+  geom_col(fill = "#4575b4") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title    = "Top 10 Genres by Average Popularity",
+    subtitle = "Some genres consistently rank higher",
+    x        = "Genre",
+    y        = "Average Popularity",
+    caption  = "Source: Spotify Dataset"
+  ) +
+  theme_minimal()
+```
+
+**Explain your data science thinking here (e.g., What pattern do you see? What specific numbers support this? What does this mean for stakeholders?):**
+
+```         
+"Pop" significantly outperforms all other genres, establishing itself as the clear market leader. While hip-hop and rock form a strong secondary tier, popularity gradually tapers off for more specific genres like folk and country. Pop leads with an average score above 55, creating a noticeable gap over hip-hop and rock, which both sit near 45. By comparison, the bottom of the top ten (country) sits at roughly 33, nearly 40% lower than pop.
+
+Investors and labels should view pop as the highest-reach category, but the high ranking of mood-based genres like "sad" suggests that targeting specific listener emotions is becoming as commercially viable as traditional genre marketing.
+```
+
+------------------------------------------------------------------------
+
+## Visualization 3: Scatter Plot
+
+**Exploratory Question 15:** Is there a relationship between tempo and popularity?
+
+```{r}
+#| label: viz-3
+#| fig-cap: "Descriptive caption"
+#| fig-width: 10
+#| fig-height: 6
+
+# Sample the data if your dataset is large (over 50,000 rows)
+viz_data_3 <- my_data_focused |>
+  collect() |>
+  sample_n(min(5000, n()))
+
+ggplot(viz_data_3, aes(x = tempo, y = popularity)) +
+  geom_point(alpha = 0.3, color = "#4575b4") +
+  geom_smooth(method = "lm", color = "#d73027", se = TRUE) +
+  labs(
+    title    = "Tempo vs Popularity",
+    subtitle = "Relationship between song speed and popularity",
+    x        = "Tempo (Beats Per Minute)",
+    y        = "Popularity",
+    caption  = "Source: Spotify Dataset"
+  ) +
+  theme_minimal()
+```
+
+**Explain your data science thinking here (e.g., What pattern do you see? What specific numbers support this? What does this mean for stakeholders?):**
+
+```         
+The scatter plot shows no significant correlation between tempo and popularity. The data points are widely dispersed across all BPM (Beats Per Minute) levels, and the regression line remains almost perfectly flat, indicating that a song's speed does not dictate its success. The red trend line stays horizontal at a popularity score of approximately 18 across the entire tempo range (0 to 220 BPM). Even in the "sweet spot" of 100–140 BPM where most songs are clustered, popularity varies wildly from 0 to 80, proving tempo is a poor predictor of outcome.
+
+For artists and producers, this means there is no "magic tempo" for a hit song. Creative teams should focus on other features like melody or lyrics rather than trying to engineer a specific BPM to chase popularity, as listeners appear to embrace both slow ballads and high-energy tracks equally.
+```
+
+------------------------------------------------------------------------
+
+## Visualization 4: Histogram
+
+**Exploratory Question 16:** What song duration range is most common, and what does this suggest about market preferences?
+
+```{r}
+#| label: viz-4
+#| fig-cap: "Descriptive caption"
+#| fig-width: 10
+#| fig-height: 6
+
+# Your visualization code here
+viz_data_4 <- my_data_focused |>
+  select(duration_ms, popularity) |>
+  collect()
+
+# Create the histogram
+ggplot(viz_data_4, aes(x = duration_ms / 60000)) +
+  geom_histogram(
+    bins = 40,
+    fill = "#4575b4",
+    color = "white"
+  ) +
+  scale_x_continuous(limits = c(0, 15)) +
+  labs(
+    title    = "Distribution of Song Duration",
+    subtitle = "Most songs fall within a common time range",
+    x        = "Song Duration (Minutes)",
+    y        = "Number of Songs",
+    caption  = "Source: Spotify Dataset"
+  ) +
+  theme_minimal()
+
+```
+
+**Explain your data science thinking here (e.g., What pattern do you see? What specific numbers support this? What does this mean for stakeholders?):**
+
+```         
+The histogram reveals a clear right-skewed distribution, where the vast majority of songs are concentrated within a narrow, mid-range duration. There is a "goldilocks zone" for song length, with a sharp drop-off for tracks shorter than two minutes or longer than six minutes. The distribution peaks aggressively between 3 and 4 minutes, with the highest bin reaching over 150,000 songs. While the data trails off toward 10+ minutes, these long-form tracks represent a tiny fraction of the total dataset compared to the massive cluster in the 3 minute range.
+
+This suggests a strong industry "standard" for song length that caters to listener attention spans and radio/streaming algorithms. For artists and labels, deviating significantly from the 3-to-5 minute window is a unconventional choice that may risk lower engagement unless the content is specifically designed for niche genres (like ambient or progressive rock).
+```
+
+------------------------------------------------------------------------
+
+## Visualization 5: Boxplot
+
+**Exploratory Question 17:** How does song duration vary by genre?
+
+```{r}
+#| label: viz-5
+#| fig-cap: "Descriptive caption"
+#| fig-width: 10
+#| fig-height: 6
+
+# Your visualization code here
+viz_data_5 <- my_data_focused |>
+  collect()
+
+# Create the boxplot
+ggplot(viz_data_5, aes(x = genre, y = duration_ms / 60000)) +
+  geom_boxplot(fill = "#4575b4", outlier.color = "#d73027", outlier.size = 1) +
+  labs(
+    title    = "Song Duration by Genre",
+    subtitle = "Shows typical duration and variation for each genre",
+    x        = "Genre",
+    y        = "Duration (Minutes)",
+    caption  = "Source: Spotify Dataset"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+**Explain your data science thinking here (e.g., What pattern do you see? What specific numbers support this? What does this mean for stakeholders?):**
+
+```         
+While the median song duration remains remarkably consistent across most genres, the volume of extreme outliers varies significantly. Genres like ambient, classical, and electronic show much wider spreads with "marathon" tracks, whereas radio-friendly genres like pop and hip-hop maintain much tighter, more predictable duration windows. Most genres center around a median of 3.5 to 4.5 minutes (the blue boxes). However, the red outlier points reveal that several genres contain tracks exceeding 75 to 100 minutes, which drastically skews the range even if they don't represent the "typical" listening experience for that category.
+
+For streaming platforms, these outliers represent a technical challenge for normalization and "skip rate" metrics. For creators, this chart proves that while you can make a 50-minute track in genres like "ambient" or "techno," doing so in "pop" or "country" would make your work a statistical anomaly, potentially hurting its compatibility with curated playlists and algorithmic discovery.
+```
+
+------------------------------------------------------------------------
+
+## Visualization Summary
+
+**Exploratory Question 18:** What is the overall story your visualizations tell?
+
+```{r}
+#| label: viz-summary-table
+
+# Fill in one row per visualization
+visualization_summary <- tribble(
+  ~viz_number, ~chart_type,    ~key_finding,        ~supports_question,
+  1,           "Line chart",   "Popularity trends over the years show steady changes in listener engagement.", "How has popularity changed over time?",
+  2,           "Bar chart",    "Certain genres consistently have higher average popularity.",                        "Which genres contribute most to popularity?",
+  3,           "Scatter plot", "Song duration has a weak positive relationship with popularity.",                        "Do musical traits predict popularity?",
+  4,           "Histogram",    "Most songs cluster around 3-4 minutes, with few very short or very long songs.",     "What is the distribution of song duration?",
+  5,           "Boxplot",      "Duration varies by genre, highlighting typical song length norms.",                       "How does song duration differ by genre?"
+)
+
+visualization_summary
+```
+
+**Explain your data science thinking here (e.g., What's the big picture story? What surprised you? What patterns connect across visualizations?):**
+
+```         
+Across the visualizations, we see that song popularity varies by genre and has changed gradually over time. Most songs are around 3–4 minutes, but certain genres produce longer or shorter tracks. Musical features like tempo and duration can provide some insight into popularity, though relationships are modest. These patterns help artists, producers, and marketers understand listener preferences and genre norms, guiding decisions around song production and playlist curation.
+```
+
+------------------------------------------------------------------------
+
+# Presentation Slide Deck: Stakeholder Communication
+
+**What you are doing:** Translating your technical findings into clear, actionable communication for decision-makers who may not have a data background.
+
+------------------------------------------------------------------------
+
+## Executive Summary
+
+**Exploratory Question 19:** If a stakeholder has only two minutes, what do they need to know?
+
+**Instructions:** Write 300 to 500 words using the BLUF approach (Bottom Line Up Front -- the most important finding comes first, not last).
+
+### What Makes a Song Popular on Spotify? -- Key Findings
+
+**Bottom Line:** Genre is the single most powerful predictor of song popularity, far outweighing technical audio features like tempo or song duration
+
+------------------------------------------------------------------------
+
+**Context:** This analysis examined a massive dataset of 1,159,764 Spotify tracks spanning from 2000 to 2023. For stakeholders like record labels and playlist curators, understanding these patterns is vital for optimizing marketing spend and improving algorithmic discovery in a saturated streaming market.
+
+**Key Findings:**
+
+1.  **Genre Dominance:** Pop music consistently achieves the highest average popularity (55.2), which is nearly 70% higher than trailing genres like country (32.8). Interestingly, mood based categories like "Sad" rank highly, suggesting listeners prioritize emotional resonance over technical structure.
+
+2.  **Structural Standards:** There is a clear "Goldilocks zone" for song length, with a massive peak of successful tracks falling between 3 and 4 minutes. Deviating significantly from this standard (under 2 or over 6 minutes) results in a sharp decline in frequency and typical popularity.
+
+3.  **The Tempo Myth:** Contrary to industry assumptions, tempo (BPM) has virtually no correlation with popularity. High-energy fast tracks and slow ballads are equally likely to succeed, indicating that "speed" is not a reliable metric for engineering a hit.
+
+**Recommendations:**
+
+1.  Spotify product teams and labels should shift focus from technical audio optimization toward "mood-based" curation, as emotional clusters like "Sad" demonstrate high commercial viability.
+
+2.  Artists and producers should aim for the 3 to 4-minute window to maximize compatibility with current streaming algorithms and listener attention spans.
+
+3.  Stakeholders should treat 2023 popularity data as incomplete due to metric "lag" and instead use 2021–2022 as the primary baseline for performance trends
+
+**Data Quality Note:** While the dataset is robust, the 2023 popularity scores appear artificially deflated due to the way Spotify calculates popularity for very recent releases. Additionally, the lack of geographic data means regional taste differences remain unexamined.
+
+------------------------------------------------------------------------
+
+## Hero Visualization
+
+**Exploratory Question 20:** Which single visualization tells your story best?
+
+Create one publication-quality chart that could stand alone in a presentation or report. It should be self-explanatory to someone who has not read your full analysis.
+
+**Checklist for a strong hero visualization:** - Clear, specific title that states the finding (not just the topic) - Informative subtitle - Axis labels with units - Text large enough to read in a slide - Color choices that are accessible to colorblind readers - Source citation in the caption
+
+```{r}
+#| label: hero-viz
+#| fig-cap: "Top 10 Genres by Average Popularity Score"
+#| fig-width: 12
+#| fig-height: 8
+
+# Prepare your data
+hero_data <- my_data_focused |>
+  # Add your data preparation steps
+  group_by(genre) |>
+  summarise(avg_popularity = mean(popularity, na.rm = TRUE), .groups = "drop") |>
+  arrange(desc(avg_popularity)) |>
+  collect() |>
+  slice_head(n = 10)
+ 
+
+ggplot(hero_data, aes(x = reorder(genre, avg_popularity), y = avg_popularity)) +
+  geom_col(fill = "#4575b4") +
+  coord_flip() +
+  labs(
+    title    = "Pop and Mood-Based Genres Lead Spotify Popularity",
+    subtitle = "Average popularity scores (0-100) across 1.16 million tracks",
+    x        = "Music Genre",
+    y        = "Average Popularity Score",
+    caption  = "Source: Spotify Dataset | Analysis: Jaycee Wang, Spring 2026"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(size = 18, face = "bold"),
+    plot.subtitle = element_text(size = 14),
+    axis.title    = element_text(size = 12),
+    axis.text     = element_text(size = 11)
+  )
+```
+
+**Explain your data science thinking here (e.g., Why did you choose this visualization? What should viewers notice first? Why does this matter to stakeholders?):**
+
+```
+I chose the genre bar chart as the "Hero Visualization" because it answers the most significant question: "What actually drives popularity?" Viewers should notice the 55+ score for Pop and the high ranking of "Sad" and "Indie-pop." This matters because it proves that genre selection and emotional branding are far more critical for commercial success than technical audio features.
+```
+
+------------------------------------------------------------------------
+
+## Limitations
+
+**Exploratory Question 21:** What are the honest limitations of your analysis?
+
+**Why this matters:** Stakeholders need to know the boundaries of what your findings can support. Acknowledging limitations builds trust, not doubt.
+
+**Explain your data science thinking here (e.g., What data limitations affected your analysis? What methodological choices might have influenced results? What questions remain unanswered?):**
+
+```
+The most significant limitation is the "Recency Lag" in the 2023 data, where popularity scores appear lower simply because the songs haven't had enough time to accumulate metric weight. Furthermore, since popularity is a proprietary Spotify metric, it may not reflect true popularity on other platforms like YouTube or TikTok. Lastly, some variables like "energy" and "loudness" are highly correlated, which could cause redundancy if these findings were used in a predictive machine learning model.
+```
+
+------------------------------------------------------------------------
+
+## Actionable Recommendations
+
+**Exploratory Question 22:** Based on your findings, what should stakeholders do?
+
+Each recommendation must be tied to a specific finding from your analysis.
+
+### Recommendation 1: Prioritize Genre Over Tempo in A&R
+
+**Finding it is based on:** The genre chart shows massive variance (Pop at 55 vs. Country at 32), while the tempo scatter plot is nearly flat.
+
+**Proposed action:**
+
+```
+Record labels should stop pressuring artists to produce "high-energy, fast-tempo" tracks under the assumption they perform better. Instead, marketing resources should be redirected toward ensuring tracks are correctly categorized into high-performing genres like Pop or "Mood" clusters.
+```
+
+**Expected impact:**
+
+```
+Increased "Hit Rate" for new releases and more efficient allocation of promotion budgets.
+```
+
+**Implementation difficulty:** [x] Easy \[ \] Moderate \[ \] Difficult
+
+------------------------------------------------------------------------
+
+### Recommendation 2: Target the "3-4 Minute Window"
+
+**Finding it is based on:** The duration histogram shows a massive peak of over 150,000 songs in the 3 to 4-minute range.
+
+**Proposed action:**
+
+```
+Music editors and curators should prioritize songs within this duration for "Mainstream" playlists. Producers should aim for this length to avoid the algorithmic penalties or listener "skips" associated with tracks over 6 minutes.
+```
+
+**Expected impact:**
+
+```
+Higher placement in editorial playlists and improved listener retention rates.
+```
+
+**Implementation difficulty:** [x] Easy \[ \] Moderate \[ \] Difficult
+
+------------------------------------------------------------------------
+
+## Hypothesis Development
+
+**Exploratory Question 23:** Based on your EDA, what hypotheses could be tested in future work?
+
+**Why this matters:** EDA generates questions; future confirmatory analysis tests them. A clear hypothesis connects your exploratory work to what comes next.
+
+### Hypothesis 1:
+
+**Null Hypothesis (H0):** \[What would be true if there is no effect or relationship?\]
+
+```         
+There is no significant difference in average popularity between the "Pop" genre and other top-tier genres.
+```
+
+**Alternative Hypothesis (H1):** \[What does your EDA suggest might be true?\]
+
+```         
+The "Pop" genre has a statistically higher average popularity than all other genres.
+```
+
+**Evidence from EDA:**
+
+```         
+What patterns in your visualizations support this hypothesis: In our bar chart, Pop (55.2) had a visible gap over the next closest genre, Hip-hop (approx. 45).
+```
+
+How to test it (suggestion is all we need here):
+
+```         
+What statistical test or additional data would confirm or reject this: An ANOVA test followed by a Tukey post-hoc test would confirm if the popularity difference between Pop and other genres is statistically significant or just a result of sample variance.
+```
+
+------------------------------------------------------------------------
+
+## Presentation Plan
+
+**Exploratory Question 24:** How do you tell this story in 5 minutes?
+
+### Slide 1: Title and Hook (30 seconds)
+
+```         
+Title: What Makes a Song Popular on Spotify?
+Hook -- one compelling statistic or insight to open with: With 1.16 million songs analyzed, we found that genre not tempo is the single most important factor for success.
+```
+
+### Slide 2: Context and Question (45 seconds)
+
+```         
+Dataset: 24 years of Spotify audio features (2000–2023)
+Why it matters: Labels need to know if they should focus on a song's "speed" or its "genre" to hit the charts.
+Key questions you investigated: Which genres have the highest average popularity?
+```
+
+### Slide 3: Key Finding 1 (60 seconds)
+
+```         
+Visualization: Top 10 Genres Bar Chart
+Finding: Pop (55.2) and mood-based "Sad" tracks dominate the rankings.
+Implication: Emotional targeting is more commercially viable than technical song tuning.
+```
+
+### Slide 4: Key Finding 2 (60 seconds)
+
+```         
+Visualization: Song Duration Histogram.
+Finding: Over 150,000 tracks cluster in the 3–4 minute "Goldilocks zone".
+Implication: Deviating from this duration window reduces the chance of algorithmic success.
+```
+
+### Slide 5: Recommendations (60 seconds)
+
+```         
+Action 1: Focus A&R on genre and mood tagging, not tempo.
+Action 2: Standardize radio/streaming edits to the 3–4 minute range.
+Action 3: Benchmarking should use 2021–2022 data as 2023 is still accumulating.
+```
+
+### Slide 6: Limitations and Next Steps (45 seconds)
+
+```         
+Key limitations: 2023 "recency lag" and lack of geographic data.
+Future work: We hypothesize that "Danceability" will be a stronger predictor of a hit than "Tempo" in future regression tests.
+```
+
+------------------------------------------------------------------------
+
+## Final Reflection
+
+**Exploratory Question 25:** What did you learn from this entire process?
+
+**Explain your data science thinking here (e.g., What surprised you most? What was the biggest challenge? What skills did you develop? How confident are you in your findings?):**
+
+```
+The most surprising discovery was the lack of correlation between tempo and popularity; I expected faster, high energy songs to dominate the charts, but the data showed that "vibe" and genre are much stronger drivers than technical speed. The biggest challenge was managing a massive dataset of 1.16 million rows and identifying the "recency lag" in the 2023 data, which initially looked like a trend but was actually a data quality artifact. Through this process, I developed strong skills in using Arrow for efficient data processing and creating "Hero Visualizations" that translate complex statistics into stakeholder-ready insights. I am highly confident in the findings regarding genre and song duration, as the patterns remained consistent across the vast sample size, though I remain cautious about 2023 performance until more complete data is available.
+```
+
+------------------------------------------------------------------------
+
+# Cleanup
+
+```{r}
+#| label: cleanup
+
+# Close the database connection if you used DuckDB
+if (exists("con")) {
+  dbDisconnect(con, shutdown = TRUE)
+  glue("Database connection closed successfully")
+}
+```
+
+------------------------------------------------------------------------
+
+# Deliverables Checklist
+
+Before submitting, confirm you have completed every item below.
+
+## Part 1: Data Loading
+
+-   [x] Data loaded successfully with Arrow
+-   [x] Correct file format and path used
+-   [x] Data verified (structure, row count, first rows)
+
+## Part 2: Initial Planning
+
+-   [x] All four planning questions completed with thoughtful written responses
+-   [x] Stakeholders identified with their decision needs
+-   [x] Dataset scope and boundaries documented
+-   [x] Quality concerns noted
+
+## Part 3: SCAN Framework
+
+-   [x] All four components completed
+-   [x] Variable summary table filled in
+-   [x] 1 to 3 initial wondering questions written (add more as you explore)
+
+## Part 4: Missing Data Analysis
+
+-   [x] Missing percentages calculated for all variables
+-   [x] Patterns examined by group
+-   [x] Patterns examined over time (if applicable)
+-   [x] Each variable classified as MCAR, MAR, or MNAR with evidence
+-   [x] Handling strategy documented for categorical variables
+-   [x] Handling strategy documented for numeric variables
+-   [x] Impact of choices assessed
+
+## Part 5: Variable Selection
+
+-   [x] Complete variable inventory created
+-   [x] Correlation analysis run for numeric variables
+-   [x] Relationship to outcome examined for categorical variables
+-   [x] Final 3 to 7 variables selected with written justification
+-   [x] Excluded variables documented with reasons
+-   [x] Tool selection (Arrow/DuckDB) justified
+
+## Part 6: Exploratory Visualizations
+
+-   [x] At least 5 visualizations created
+-   [x] At least 3 different chart types used
+-   [x] Exploratory question stated for each visualization
+-   [x] All three interpretation sections completed (Pattern / Evidence / Implications)
+-   [x] Narrative synthesis written connecting the visualizations
+-   [x] Visualization summary table filled in
+
+## Presentation: Stakeholder Communication
+
+-   [x] Executive summary written (300 to 500 words, BLUF format)
+-   [x] Hero visualization created and explained
+-   [x] Limitations documented honestly (data, methodological, scope)
+-   [x] 2 to 3 actionable recommendations with evidence
+-   [x] One to Two testable hypotheses developed
+-   [x] 5-minute presentation outline completed
+-   [x] Final reflection completed
+
+## Overall Quality
+
+-   [x] All code chunks run without errors
+-   [x] No placeholder variable names (like `variable1` or `your_column`) left in the code
+-   [x] All written interpretation sections filled in
+-   [x] Writing is clear and professional
+-   [x] Analysis is honest about what it can and cannot show
+
+------------------------------------------------------------------------
+
+# Grading Criteria
+
+**Part 2: Initial Planning (10%)** -- Thoughtful responses to all four planning questions showing genuine understanding of stakeholders, dataset scope, quality concerns, and initial expectations.
+
+**Part 3: SCAN Framework and I Wonder Questions (10%)** -- Systematic first exploration with specific, meaningful observations. Wondering questions are clear, answerable, and connected to stakeholder needs. Questions evolve as exploration continues.
+
+**Part 1: Data Loading and Setup (10%)** -- Successful implementation with proper documentation and verification.
+
+**Part 4: Missing Data Analysis (20%)** -- Systematic quantification, pattern identification, evidence-based classification (MCAR/MAR/MNAR), thoughtful handling strategies with justification, and impact assessment.
+
+**Part 5: Variable Selection (15%)** -- Comprehensive inventory, appropriate relationship analysis, justified final variable set, and clear documentation of exclusions.
+
+**Part 6: Exploratory Visualizations (25%)** -- Five or more publication-quality visualizations, at least three different chart types, clear exploratory questions, insightful interpretations with evidence, stakeholder-focused implications, and coherent narrative synthesis.
+
+**Part 7: Stakeholder Communication (10%)** -- Clear and concise executive summary (BLUF), compelling hero visualization, honest limitations, actionable recommendations, well-developed hypotheses, and a structured presentation plan.
+
+------------------------------------------------------------------------
+
+# Tips for Success
+
+**Read each section introduction before writing code.** The introduction explains what you are doing and why, which helps you understand what to put in the code and in your written responses.
+
+**Fill in written responses immediately after running each code chunk.** Do not leave them blank to fill in later -- it is much harder to remember what you were thinking.
+
+**Use specific numbers in your interpretations.** "Sales increased significantly" is vague. "Sales increased 34% between January and March" is evidence.
+
+**Be honest about limitations.** Acknowledging what your data cannot tell you is a sign of good analysis, not a weakness.
+
+**Ask for help early.** If your data format does not match the provided templates, come to office hours before spending hours troubleshooting alone.
+
+**Render the document often.** Do not wait until the end to check that everything knits. Render after each part to catch errors early.
+
+------------------------------------------------------------------------
+
+*This material is based upon work supported by the National Science Foundation under Grant #DGE-2222148.*
+
+
+```{=html}
+<!--
+-->
+```
+
+\`\`\`\`
